@@ -73,16 +73,17 @@ def verify_client(ip):
         return True
 
 def start_server():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s: # socket.AF_INET - сокет принимает ipv4-адреса. socket.SOCK_STREAM - тип сокета: TCP
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # socket.SOL_SOCKET - уровень настроек сокета: основной. socket.SO_REUSEADDR - можно повторно использовать IP-адрес и порт повторно. 1 - опция REUSEADDR включена
         s.bind(('0.0.0.0', port))
         s.listen()
 
         print(f"Порт: {port}")
 
         while True:
-            conn, addr = s.accept()
-            Thread(target=handle_client, daemon=True, args=(conn, addr[0])).start()
+            # ждем подключение клиента
+            conn, addr = s.accept() # conn - сокет для обмена данных с новым клиентом. addr - IP-адрес и порт
+            Thread(target=handle_client, daemon=True, args=(conn, addr[0])).start() # взаимодействиуем с новым клиентом параллельно с другими
 
 if __name__ == '__main__':
     start_server()

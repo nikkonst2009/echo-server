@@ -14,20 +14,21 @@ def find_free_port():
                 continue
 
 port = find_free_port()
-clients = {} # словарь IP -> сокет
+clients = {}  # словарь IP -> сокет
 
 def handle_client(conn, ip):
     try:
-        # Если клиенту отказано в доступе, то игнорируем клиента
+        # Если клиенту отказано в доступе, закрываем соединение сразу
         if not verify_client(ip):
             conn.sendall(f"Отказано в доступе клиенту {ip}".encode("UTF-8"))
+            conn.close()  # Закрываем соединение при отказе
             return
 
-        print(f"Сокет сервера: Клиент {ip} есть в списке разрешенных IP-адресов")
+        print(f"Клиент {ip} есть в списке разрешенных IP-адресов")
         clients[ip] = conn
 
         # Отправляем историю чата новому клиенту
-        print(f"Сокет сервера: Отправка истории сообщений клиенту {ip}")
+        print(f"Отправка истории сообщений клиенту {ip}")
         with open("messages.txt", "r") as file:
             history = file.read()
             if history:
@@ -39,51 +40,53 @@ def handle_client(conn, ip):
                 break
 
             decoded_data = data.decode()
-            print(f"Сокет сервера: Новое расшифрованное сообщение от клиента {ip}\n* {decoded_data}")
+            print(f"Новое расшифрованное сообщение от клиента {ip}\n* {decoded_data}")
 
-            messages_file = open("messages.txt", "a")
-            messages_file.write(decoded_data + "\n")
-            messages_file.close()
-            print(f"Компьютер: Новое сообщение записано в файл истории сообщений")
+            with open("messages.txt", "a") as messages_file:
+                messages_file.write(decoded_data + "\n")
+            print(f"Новое сообщение записано в файл истории сообщений")
 
-            print(f"Сокет сервера: Отправка сообщений всем клиентам")
-            for ip in clients:
-                with open("messages.txt", "r") as file:
-                    history = file.read()
+            # Читаем историю один раз для всех клиентов
+            with open("messages.txt", "r") as file:
+                history = file.read()
+            
+            # Создаем копию словаря для безопасной итерации
+            for client_ip, client_conn in list(clients.items()):
+                try:
                     if history:
-                        print(f"Сокет клиента {ip}: Отправка истории сообщений клиенту {ip}")
-                        clients[ip].sendall(history.encode("UTF-8"))
-
+                        print(f"Отправка истории сообщений клиенту {client_ip}")
+                        client_conn.sendall(history.encode("UTF-8"))
+                except Exception as e:
+                    print(f"Ошибка отправки клиенту {client_ip}: {str(e)}")
+                    # Удаляем нерабочий сокет из словаря
+                    client_conn.close()
+                    del clients[client_ip]
 
     except Exception as e:
         print(f"Отключение клиента {ip} из-за ошибки: ", str(e))
-
-    clients[ip].close()
-    del clients[ip]
+    finally:
+        # Гарантированно закрываем соединение и чистим словарь
+        if ip in clients:
+            clients[ip].close()
+            del clients[ip]
+        conn.close()  # Дополнительная страховка
 
 def verify_client(ip):
-    # Проверяем, от какого IP-адреса идет запрос до обработки и отправки данных
-    ip_adresses_list = open("allowed_ip_adresses.txt", "r").read().split(sep="\n")
-    is_ip_valid = ip in ip_adresses_list
-
-    if not is_ip_valid:
-        print(f"Неудачное подключение к серверу: Отказано в доступе клиенту {ip}")
-        return False
-    else:
-        return True
+    with open("allowed_ip_adresses.txt", "r") as f:
+        ip_adresses_list = f.read().splitlines()
+    return ip in ip_adresses_list
 
 def start_server():
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s: # socket.AF_INET - сокет принимает ipv4-адреса. socket.SOCK_STREAM - тип сокета: TCP
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1) # socket.SOL_SOCKET - уровень настроек сокета: основной. socket.SO_REUSEADDR - можно повторно использовать IP-адрес и порт повторно. 1 - опция REUSEADDR включена
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('0.0.0.0', port))
         s.listen()
 
         print(f"Порт: {port}")
 
         while True:
-            # ждем подключение клиента
-            conn, addr = s.accept() # conn - сокет для обмена данных с новым клиентом. addr - IP-адрес и порт
-            Thread(target=handle_client, daemon=True, args=(conn, addr[0])).start() # взаимодействиуем с новым клиентом параллельно с другими
+            conn, addr = s.accept()
+            Thread(target=handle_client, daemon=True, args=(conn, addr[0])).start()
 
 if __name__ == '__main__':
     start_server()

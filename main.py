@@ -31,8 +31,10 @@ def handle_client(conn, ip):
         print(f"Отправка истории сообщений клиенту {ip}")
         with open("messages.txt", "r") as file:
             history = file.read()
-            if history:
+            if history != "":
                 conn.sendall(history.encode("UTF-8"))
+            else:
+                conn.sendall("Список сообщений пуст. Напишите что-нибудь.\nGithub сервера: github.com/nikkonst2009/echo-server\nGithub мессенджера: github.com/nikkonst2009/echo-messenger".encode("UTF-8"))
 
         while True:
             data = conn.recv(1024)
